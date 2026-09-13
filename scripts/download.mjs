@@ -678,6 +678,10 @@ async function installVulkanLoaderForWindows(targetDir) {
  * VS 自带的 app-local 副本（Redist 目录下 x64 的 Microsoft.VC14x.OpenMP）依赖
  * VCRUNTIME140 + UCRT，会把 /MT 去掉的依赖又请回来。与 release.yml 的 Package 步骤同源。
  *
+ * vcomp140.dll 属于微软可再分发代码（见“Redistributing Visual C++ Files”文档）。这是
+ * app-local 分发：该副本不随 Windows Update 更新，微软给 CRT/OpenMP 发安全更新时，
+ * 需要跟版重建运行时包，不要当成“已经永久修好”。
+ *
  * @param {string} targetDir vcomp140.dll 的落地目录（exe 同级）。
  * @returns {Promise<void>} 系统里没有该 DLL（未装 VC++ Redistributable）时抛出。
  */

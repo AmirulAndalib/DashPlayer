@@ -56,7 +56,9 @@ jobs:
       # 解析契约（见 WhisperCppCli.parseOutput），升级前需重新验证
       WHISPER_CPP_REF: 52a939a2a762224e255d366c1182b2af4dd1a032
       # Vulkan SDK 版本：必须 1.4.x（1.3.290 不带 SPIRV-Headers 的 cmake config），
-      # 与 llama.cpp 保持一致；vulkan-1.dll 也从同版本的官方运行包里取，见 Package 步骤
+      # 与 llama.cpp 保持一致；vulkan-1.dll 也从同版本的官方运行包里取，见 Package 步骤。
+      # 改这个版本号时必须同步 scripts/download.mjs 的 VULKAN_RUNTIME_VERSION：
+      # 那边把它自动并进运行时配方标记，旧装机才会重装拿到新 loader
       VULKAN_VERSION: 1.4.357.0
     steps:
       - name: Checkout whisper.cpp
@@ -131,7 +133,9 @@ jobs:
             # 取系统里的那份（vc_redist 装进 System32 的版本，只依赖 KERNEL32）：VS 自带的
             # app-local 副本（VC/Redist/MSVC/*/x64/Microsoft.VC14*.OpenMP/）是另一个构建，
             # 自己依赖 VCRUNTIME140 + UCRT，拿它等于把刚用 /MT 去掉的依赖又请回来（实测被
-            # Verify 步骤拦下）。runner 镜像自带 VC++ Redistributable，缺件就 fail-closed
+            # Verify 步骤拦下）。runner 镜像自带 VC++ Redistributable，缺件就 fail-closed。
+            # vcomp140.dll 属微软可再分发代码：app-local 副本不随 Windows Update 更新，
+            # 微软给 CRT/OpenMP 发安全更新时需跟版重建，别当成“已经永久修好”
             VCOMP="$(cygpath -u "${SystemRoot:-C:\\Windows}")/System32/vcomp140.dll"
             [ -f "$VCOMP" ] || { echo "[FAIL] 找不到 $VCOMP：runner 缺少 VC++ Redistributable"; exit 1; }
             cp "$VCOMP" stage/vcomp140.dll

@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
-import { detectGpuFallback, parseWhisperCppOutput } from '@/backend/infrastructure/media/whispercpp/WhisperCppCli';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describeAbnormalExit, detectGpuFallback, parseWhisperCppOutput } from '@/backend/infrastructure/media/whispercpp/WhisperCppCli';
 
 // 日志与运行时路径是系统边界：模块加载期会触达 Electron app，测试中静音并替换。
 vi.mock('@/backend/infrastructure/logger', () => ({
@@ -129,5 +132,53 @@ describe('核显回退检测', () => {
         const stderr = 'parakeet_backend_init: failed to initialize ACCEL backend';
 
         expect(detectGpuFallback(stderr)).toBe(false);
+    });
+});
+
+describe('异常退出诊断', () => {
+    let engineDir: string;
+
+    beforeEach(() => {
+        engineDir = fs.mkdtempSync(path.join(os.tmpdir(), 'whisper-exit-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(engineDir, { recursive: true, force: true });
+    });
+
+    it('引擎目录缺少随包 DLL 时点名缺失文件并给出修复指引', () => {
+        const diagnosis = describeAbnormalExit(3221225781, engineDir);
+
+        expect(diagnosis).toContain('0xC0000135');
+        expect(diagnosis).toContain('引擎目录缺少 vulkan-1.dll、vcomp140.dll');
+        expect(diagnosis).toContain('请重新安装应用');
+    });
+
+    it('随包 DLL 齐全时不误报缺失，提示文件可能损坏', () => {
+        fs.writeFileSync(path.join(engineDir, 'vulkan-1.dll'), 'stub');
+        fs.writeFileSync(path.join(engineDir, 'vcomp140.dll'), 'stub');
+
+        const diagnosis = describeAbnormalExit(3221225781, engineDir);
+
+        expect(diagnosis).toContain('运行库文件齐全');
+        expect(diagnosis).not.toContain('引擎目录缺少');
+    });
+
+    it('有符号表示的退出码同样能识别', () => {
+        // Node 在 Windows 上可能给有符号表示：-1073741515 即 0xC0000135
+        fs.writeFileSync(path.join(engineDir, 'vulkan-1.dll'), 'stub');
+        fs.writeFileSync(path.join(engineDir, 'vcomp140.dll'), 'stub');
+
+        expect(describeAbnormalExit(-1073741515, engineDir)).toContain('0xC0000135');
+    });
+
+    it('内存访问冲突等其他 NTSTATUS 退出码翻译为可读原因', () => {
+        expect(describeAbnormalExit(3221225477, engineDir)).toContain('内存访问冲突');
+        expect(describeAbnormalExit(3221225794, engineDir)).toContain('DLL 初始化失败');
+    });
+
+    it('普通退出码与信号终止不编造诊断', () => {
+        expect(describeAbnormalExit(134, engineDir)).toBeNull();
+        expect(describeAbnormalExit(null, engineDir)).toBeNull();
     });
 });

@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [6.12.2](https://github.com/solidSpoon/DashPlayer/compare/v6.12.1...v6.12.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* whisper 异常退出时翻译退出码并探测缺失的运行库 ([2c1a26b](https://github.com/solidSpoon/DashPlayer/commit/2c1a26b8bb8f0c6a74b612dd86bfc2d4e5767105))
+* whisper 异常退出时翻译退出码并探测缺失的运行库 ([fdde32b](https://github.com/solidSpoon/DashPlayer/commit/fdde32b873ad8cc290ec4cf1be8af2f85a861701))
+* Windows whisper 运行时零外部依赖（静态 CRT + 随包 DLL） ([0449d20](https://github.com/solidSpoon/DashPlayer/commit/0449d2020203b2bd954bdcac93a52298ff6b360a))
+* Windows whisper 运行时零外部依赖（静态 CRT + 随包 vcomp140/vulkan-1） ([f5ef786](https://github.com/solidSpoon/DashPlayer/commit/f5ef7867148d6f089acfddef9e3e6688af08fe2f))
+* 运行时配方标记并入 Vulkan loader 版本 ([4b75385](https://github.com/solidSpoon/DashPlayer/commit/4b753852280b5fd11bce90ef04e227dcb5b86bf1))
+
 ## [6.12.1](https://github.com/solidSpoon/DashPlayer/compare/v6.12.0...v6.12.1) (2026-09-12)
 
 

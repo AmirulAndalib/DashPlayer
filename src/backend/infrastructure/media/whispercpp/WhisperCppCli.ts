@@ -33,6 +33,53 @@ export function detectGpuFallback(stderr: string): boolean {
     return GPU_FALLBACK_MARKERS.some((marker) => stderr.includes(marker));
 }
 
+/** Windows 随包运行库清单：与 release.yml / scripts/download.mjs 的打包契约一致，改随包清单要同步这里。 */
+const WINDOWS_RUNTIME_DLLS = ['vulkan-1.dll', 'vcomp140.dll'] as const;
+
+/**
+ * Windows NTSTATUS 异常退出码（8 位十六进制小写）→ 可读原因。
+ * parakeet-cli 在加载期失败时 stderr 为空，用户与日志能看到的只有裸退出码，必须翻译。
+ */
+const NTSTATUS_EXIT_REASONS: Record<string, string> = {
+    'c0000135': '缺少必需的 DLL（进程在加载期被系统终止）',
+    'c000007b': '映像格式错误（DLL 与系统架构不匹配或文件损坏）',
+    'c0000142': 'DLL 初始化失败',
+    'c000001d': '执行了非法指令（二进制损坏或 CPU 不支持）',
+    'c0000005': '内存访问冲突（程序内部错误）',
+};
+
+/** "找不到 DLL"类退出码：对它进一步探测引擎目录，指名报出缺失的随包文件。 */
+const DLL_NOT_FOUND_EXIT_CODE = 'c0000135';
+
+/**
+ * 把异常退出码翻译成可读原因与修复指引（Windows NTSTATUS 专用）。
+ *
+ * parakeet-cli 在加载期失败（如随包 DLL 被清理或损坏）时 stderr 为空，
+ * 只剩裸退出码可读；对"找不到 DLL"类退出码探测引擎目录，指名报出缺失的
+ * 随包文件。按"显式报错、不静默兜底"的约定只给修复指引，不自动补件。
+ *
+ * @param code 子进程退出码；Windows 上可能以无符号（3221225781）或有符号（-1073741515）出现。
+ * @param engineDir parakeet-cli 所在目录（随包 DLL 的落地位置）。
+ * @returns 可读诊断文本；非 NTSTATUS 退出码时返回 null，不猜测原因。
+ */
+export function describeAbnormalExit(code: number | null, engineDir: string): string | null {
+    if (code === null) return null;
+    const hex = (code >>> 0).toString(16).padStart(8, '0');
+    const reason = NTSTATUS_EXIT_REASONS[hex];
+    if (!reason) return null;
+    const parts = [`0x${hex.toUpperCase()} ${reason}`];
+    if (hex === DLL_NOT_FOUND_EXIT_CODE) {
+        const missing = WINDOWS_RUNTIME_DLLS.filter((name) => !fs.existsSync(path.join(engineDir, name)));
+        parts.push(
+            missing.length > 0
+                ? `引擎目录缺少 ${missing.join('、')}，可能被杀毒软件清理或安装不完整`
+                : '引擎目录里应用自带的运行库文件齐全，可能是文件损坏或被安全软件拦截'
+        );
+        parts.push('请重新安装应用');
+    }
+    return parts.join('；');
+}
+
 /**
  * whisper.cpp CLI 单次执行请求。
  */
@@ -186,16 +233,22 @@ export class WhisperCppCli {
                     }
                     if (code !== 0) {
                         const exitReason = signal ? `被信号 ${signal} 终止` : `退出码 ${code}`;
+                        // 加载期失败（如缺 DLL）时 stderr 为空，翻译后的原因让这条日志自身可读。
+                        const diagnosis = describeAbnormalExit(code, path.dirname(executablePath));
                         this.logger.error('whisper.cpp exited abnormally', {
                             job: request.job,
                             pid: child.pid,
                             exitCode: code,
                             signal,
+                            ...(diagnosis !== null && { hint: diagnosis }),
                             // 尾部行数组入日志，避免整段文本被单字段长度上限截掉关键原因。
                             stderrTail: tailLines(stderr, LOG_TAIL_LINES),
                             stdoutTail: tailLines(stdout, LOG_TAIL_LINES),
                         });
-                        reject(new Error(`whisper.cpp ${exitReason}：${stderr.slice(-2000)}`));
+                        // 诊断放在 stderr 之前：加载期失败时 stderr 为空，它是唯一可读的原因线索。
+                        const stderrText = stderr.slice(-2000).trim();
+                        const details = [diagnosis, stderrText].filter(Boolean).join('；');
+                        reject(new Error(`whisper.cpp ${exitReason}${details ? `：${details}` : ''}`));
                         return;
                     }
                     try {

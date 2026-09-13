@@ -88,6 +88,7 @@ preload 每次 `invoke` 生成一个 trace id，main 在 `registerRoute` 边界�
 | `PlaybackRepairService` | main | 播放修复任务收尾：`repair finished` / `repair cancelled` / `repair failed` / `repair task crashed`（含 `job: repair:<路径>`）——`job` 首尾成对靠这几条收尾闭环 |
 | `FfmpegServiceImpl` | main | 只记录网关看不到的任务体异常（`ffmpeg task failed`，含 `job`）；子进程失败与取消不在这里重复 |
 | `FfmpegGatewayImpl` | main | `spawned ffmpeg`（`job`/`pid`/`command`）、`FFmpeg 执行完成`、`FFmpeg 执行失败`（error，含 `exitCode`/`pid`/`stderrTail`）、`FFmpeg 已取消`（info）——子进程维度的唯一证据点 |
+| `WhisperCpp` | main | 识别子进程启停与异常退出：`spawned whisper.cpp parakeet-cli`、`whisper.cpp exited abnormally`（含 `exitCode` 与 NTSTATUS 退出码翻译后的 `hint`）、`whisper.cpp output rejected`、`whisper.cpp cancelled`、`whisper.cpp ran on CPU fallback` |
 | `SherpaOnnx` / `SherpaTts` | main | 识别/合成子进程启停与异常退出：`spawned sherpa-onnx`、`sherpa-onnx exited abnormally`、`sherpa-onnx output rejected`、`sherpa-onnx cancelled` |
 | `LocalTranscriptionService` | main | `transcription started`、分段识别重试与耗尽、`transcription done`/`transcription cancelled`/`transcription failed` 任务收尾（含 `elapsedMs`，done 另带 `chunkCount`/`srtPath`）——`job` 首尾成对靠这三条收尾闭环 |
 | `VideoLearningServiceImpl` | main | `clip trim started` / `clip ready` / 片段任务失败 |
@@ -245,7 +246,7 @@ grep -E '"message":"(log archived|log write failed)"' "$LATEST" | jq -c '{timest
 | 界面白屏、窗口打开即空 | `renderer did fail load`、`renderer preload error` | 看 `errorCode`、`validatedURL` |
 | 整个应用偶发闪退 | `render process gone` / `child process gone`，再往前 20 行看最后一条 info | 用 `runId` 限定本次会话 |
 | 字幕转录卡住不动 | `transcription started` 是否有、分段重试 warn、`long hold detected`（whisper 锁） | `grep '"job":"transcription:<路径>"'` |
-| 转录/转码报错但没有原因 | `FfmpegGatewayImpl` 的 `FFmpeg 执行失败`、`SherpaOnnx` 的 `sherpa-onnx exited abnormally` 的 `stderrTail` 数组 | `jq '.data.stderrTail'`，不要看 `error.message`（会被截断） |
+| 转录/转码报错但没有原因 | `FfmpegGatewayImpl` 的 `FFmpeg 执行失败`、`WhisperCpp` 的 `whisper.cpp exited abnormally`（`hint` 是退出码翻译，加载期失败时 `stderrTail` 为空）、`SherpaOnnx` 的 `sherpa-onnx exited abnormally` 的 `stderrTail` 数组 | `jq '.data.stderrTail'`，不要看 `error.message`（会被截断） |
 | 学习片段没生成 | `clip trim started` 有、`clip ready` 没有 → 中间失败；再查片段任务失败 error | `grep '"job":"clip:'` |
 | 提示没弹出来 / 状态没刷新 | `RendererEvents` 的 `renderer event dropped`（窗口销毁/不可用）与 `web contents destroyed` 对齐 | `grep -E 'renderer event dropped|web contents destroyed'` |
 | 操作很慢 | `ipc request completed` 的 `durationMs`；再看 `concurrency` 的 `wait passed` / `long hold detected` | 见 7.7、7.8 |

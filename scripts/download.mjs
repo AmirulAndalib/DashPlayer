@@ -584,13 +584,6 @@ async function download({url, dir, file, sha}) {
 const WHISPER_CPP_REF = '52a939a2a762224e255d366c1182b2af4dd1a032';
 
 /**
- * 运行时配方版本：构建参数或“随包附带文件”一变就必须 +1。
- * 同一 ref 不同配方产出的二进制不可互换（r3 = Windows 静态 CRT + OpenMP + 附带
- * vulkan-1.dll/vcomp140.dll），标记里带上它，已装的旧配方运行时才会被重装而不是继续沿用。
- */
-const WHISPER_RUNTIME_RECIPE = 'r3';
-
-/**
  * Windows 侧 ggml-vulkan 对 vulkan-1.dll 是硬链接依赖（非 delay-load）：干净系统
  * （无独显驱动、未装 VC 运行库）的 system32 里没有它，缺了进程在加载期就死。
  * loader 取 LunarG 官方运行包（Apache-2.0/MIT，许可证随包附带），
@@ -598,6 +591,14 @@ const WHISPER_RUNTIME_RECIPE = 'r3';
  */
 const VULKAN_RUNTIME_VERSION = '1.4.357.0';
 const VULKAN_RUNTIME_COMPONENTS_URL = `https://sdk.lunarg.com/sdk/download/${VULKAN_RUNTIME_VERSION}/windows/vulkan-runtime-components.zip`;
+
+/**
+ * 运行时配方版本：构建参数一变就必须手动 +1；随包 loader 的版本由
+ * VULKAN_RUNTIME_VERSION 自动并入标记，升级 loader 不必再手动 bump（r3 = Windows
+ * 静态 CRT + OpenMP + 附带 vulkan-1.dll/vcomp140.dll）。同一 ref 不同配方产出的二进制
+ * 不可互换，标记里带上它，已装的旧配方运行时才会被重装而不是继续沿用。
+ */
+const WHISPER_RUNTIME_RECIPE = `r3+vk${VULKAN_RUNTIME_VERSION}`;
 
 /**
  * MSVC 的 OpenMP 运行时文件名：只有 DLL 形式、/MT 也去不掉（见
